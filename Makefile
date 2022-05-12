@@ -1,15 +1,17 @@
 CXX=g++
 CXXFLAGS=-O3 -march=native
-LDLIBS1=-lm -lIL
-LDLIBS2=`pkg-config --libs opencv`
+LDLIBS=`pkg-config --libs opencv`
 
 
 all: main-cu
 
+main: main.cpp
+	$(CXX) $(CXXFLAGS) -o $@ $< $(LDLIBS)
+
 main-cu: main.cu
-	nvcc -o $@ $< $(LDLIBS2)
+	nvcc -o $@ $< $(LDLIBS)
 
 .PHONY: clean
 
 clean:
-	rm main-cu
+	rm main-cu main out*
