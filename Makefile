@@ -3,7 +3,7 @@ CXXFLAGS=-O3 -march=native
 LDLIBS=`pkg-config --libs opencv`
 
 
-all: main-cu
+all: main-cu main
 
 main: main.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $< $(LDLIBS)
