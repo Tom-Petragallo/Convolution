@@ -19,28 +19,32 @@ void convolution(vector<vector<T>> M, string in, string out);
 
 int main(int argc, char *argv[])
 {
-
 	if (argc != 3) {
-		cout << "Utilisation : cmd fichier blur|edges|id|gray" << endl;
+		cout << "Utilisation : cmd fichier filtre" << endl;
+		cout << "Filtres disponibles : gris->blur|edges|id ou rvb->gray" << endl;
 		return 0;
 	}
-	string nom = argv[2];
 
 	auto start = chrono::steady_clock::now();
+
+	string nom = argv[2];
+	string in = argv[1];
+
 	if (nom == "blur")
-		blur(argv[1]);
+		blur(in);
 	else if (nom == "edges")
-		edges(argv[1]);
+		edges(in);
 	else if (nom == "id")
-		id(argv[1]);
+		id(in);
 	else if (nom == "gray")
-		gray_scale(argv[1]);
+		gray_scale(in);
 	else {
-		cout << "non reconnu" << endl;
+		cout << "Filtre non reconnu" << endl;
 		return 0;
 	}
 
 	auto end = std::chrono::steady_clock::now();
+	cout << "Traitement terminé" << endl;
 	chrono::duration<double> elapsed_seconds = end-start;
 	cout << "elapsed time: " << elapsed_seconds.count() << "s\n";
 
@@ -50,7 +54,7 @@ int main(int argc, char *argv[])
 void id(string in) {
 	vector<vector<int>> M = {{0,0,0},{0,1,0},{0,0,0}};
 	afficher_matrice<int>(M);
-	convolution<int>(M,in,"out_blur.jpg");
+	convolution<int>(M,in,"out_id.jpg");
 }
 
 void blur(string in) {
@@ -120,7 +124,6 @@ void convolution(vector<vector<T>> M, string in, string out) {
 			res[i + j * larg] = (unsigned char) somme;
 		}
 	}
-    cout << "traitement terminé" << endl;
     cv::Mat m_out( haut, larg, CV_8UC1, res.data() );
     cv::imwrite(out, m_out);
 }
