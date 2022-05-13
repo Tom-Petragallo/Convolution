@@ -11,9 +11,9 @@ void edges(string in);
 void id(string in);
 void gray_scale(string in);
 template <typename T>
-void afficher_matrice(vector<vector<T>> M);
+void afficher_matrice(vector<T> M, int N);
 template <typename T>
-void convolution(vector<vector<T>> M, string in, string out);
+void convolution(vector<T> M, int N, string in, string out);
 
 int main(int argc, char *argv[])
 {
@@ -37,6 +37,7 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
+	cout << "Traitement terminé" << endl;
 	return 0;
 }
 
@@ -45,28 +46,28 @@ int main(int argc, char *argv[])
 
 
 void id(string in) {
-	vector<vector<int>> M = {{0,0,0},{0,1,0},{0,0,0}};
-	afficher_matrice<int>(M);
-	convolution<int>(M,in,"out_blur.jpg");
+	vector<int> M = {0,0,0,0,1,0,0,0,0};
+	afficher_matrice<int>(M,3);
+	convolution<int>(M,3,in,"out_id.jpg");
 }
 
 void blur(string in) {
-	vector<vector<float>> M = {{0.0625,0.125,0.0625},{0.125,0.25,0.125},{0.0625,0.125,0.0625}};
-	afficher_matrice<float>(M);
-	convolution<float>(M,in,"out_blur.jpg");
+	vector<float> M = {0.0625,0.125,0.0625,0.125,0.25,0.125,0.0625,0.125,0.0625};
+	afficher_matrice<float>(M,3);
+	convolution<float>(M,3,in,"out_blur.jpg");
 }
 
 void edges(string in) {
-	vector<vector<int>> M = {{-1,-1,-1},{-1,8,-1},{-1,-1,-1}};
-	afficher_matrice<int>(M);
-	convolution<int>(M,in,"out_edges.jpg");
+	vector<int> M = {-1,-1,-1,-1,8,-1,-1,-1,-1};
+	afficher_matrice<int>(M,3);
+	convolution<int>(M,3,in,"out_edges.jpg");
 }
 
 template <typename T>
-void afficher_matrice(vector<vector<T>> M) {
-	for (int i=0; i<M.size(); i++) {
-		for (int j = 0; j < M[i].size(); j++) {
-			cout << M[i][j] << ",";
+void afficher_matrice(vector<T> M, int N) {
+	for (int i=0; i<N; i++) {
+		for (int j = 0; j < N; j++) {
+			cout << M[i+j*N] << ",";
 		}
 		cout << endl;
 	}
@@ -128,7 +129,7 @@ void gray_scale(string in) {
 	cudaEventRecord(stop,0);
 	cudaEventSynchronize(stop);
 	cudaEventElapsedTime(&elapsedTime, start, stop);
-	cout << "Temps d'éxecution : " << elapsedTime << endl;
+	cout << "Temps d'éxecution : " << elapsedTime << "s" << endl;
 
 	status = cudaMemcpy( g.data(), g_d, rows * cols, cudaMemcpyDeviceToHost );
 	if (status != cudaSuccess) cout << "Erreur memcpy DtH g_d" << endl;
@@ -141,15 +142,16 @@ void gray_scale(string in) {
 
 
 
-
-__global__ void convolution_gpu( unsigned char * g, float * M, unsigned char * res, size_t cols, size_t rows ) {
-	auto i = blockIdx.x * blockDim.x + threadIdx.x;
-	auto j = blockIdx.y * blockDim.y + threadIdx.y;
-
+template <typename T>
+__global__ void convolution_gpu( unsigned char * g, T * M, unsigned char * res, int N, size_t cols, size_t rows ) {
+	int i = blockIdx.x * blockDim.x + threadIdx.x;
+	int j = blockIdx.y * blockDim.y + threadIdx.y;
+	int min = -(N-1)/2;
+	int max = (N-1)/2;
 	if( i < cols && j < rows ) {
-		float somme = 0;
-		for (int x = -1; x < 2; x++) {
-			for (int y = -1; y < 2; y++) {
+		T somme = 0;
+		for (int x = min; x < max+1; x++) {
+			for (int y = min; y < max+1; y++) {
 				int i_c = i + x;
 				int j_c = j + y;
 
@@ -163,7 +165,7 @@ __global__ void convolution_gpu( unsigned char * g, float * M, unsigned char * r
 					j_c = rows - 1;
 
 				int i_g = j_c * cols + i_c;
-				int gray = g[i_g];
+				T gray = g[i_g];
 				somme += M[x + 1 + (y + 1)*3] * gray;
 			}
 		}
@@ -174,7 +176,7 @@ __global__ void convolution_gpu( unsigned char * g, float * M, unsigned char * r
 }
 
 template <typename T>
-void convolution(vector<vector<T>> M, string in, string out) {
+void convolution(vector<T> M, int N, string in, string out) {
 	cv::Mat m_in = cv::imread(in, cv::IMREAD_UNCHANGED );
 	unsigned char* g = m_in.data;
 	int cols = m_in.cols;
@@ -184,7 +186,7 @@ void convolution(vector<vector<T>> M, string in, string out) {
 	vector< unsigned char > res (cols*rows);
 
 	unsigned char * g_d;
-	float * M_d;
+	T * M_d;
 	unsigned char * res_d;
 
 	cudaError_t status;
@@ -193,12 +195,12 @@ void convolution(vector<vector<T>> M, string in, string out) {
 	if (status != cudaSuccess) cout << "Erreur malloc g_d" << endl;
 	status = cudaMalloc( &res_d, rows * cols );
 	if (status != cudaSuccess) cout << "Erreur malloc res_d" << endl;
-	status = cudaMalloc( &M_d, 9*sizeof(float) );
+	status = cudaMalloc( &M_d, M.size()*sizeof(T) );
 	if (status != cudaSuccess) cout << "Erreur malloc M_d" << endl;
 
 	status = cudaMemcpy( g_d, g, rows * cols, cudaMemcpyHostToDevice );
 	if (status != cudaSuccess) cout << "Erreur memcpy HtD g_d" << endl;
-	status = cudaMemcpy( M_d, g, 9*sizeof(float), cudaMemcpyHostToDevice );
+	status = cudaMemcpy( M_d, M.data(), M.size()*sizeof(T), cudaMemcpyHostToDevice );
 	if (status != cudaSuccess) cout << "Erreur memcpy HtD M_d" << endl;
 
 	float elapsedTime;
@@ -209,7 +211,7 @@ void convolution(vector<vector<T>> M, string in, string out) {
 
 	dim3 t( 32, 32 );
 	dim3 b( ( cols - 1) / t.x + 1 , ( rows - 1 ) / t.y + 1 );
-	convolution_gpu<<< b, t >>>( g_d, M_d, res_d, cols, rows );
+	convolution_gpu<T><<< b, t >>>( g_d, M_d, res_d, N, cols, rows );
 
 	auto kernelStatus = cudaGetLastError();
 	if ( kernelStatus != cudaSuccess )
@@ -218,13 +220,12 @@ void convolution(vector<vector<T>> M, string in, string out) {
 	cudaEventRecord(stop,0);
 	cudaEventSynchronize(stop);
 	cudaEventElapsedTime(&elapsedTime, start, stop);
-	cout << "Temps d'éxecution : " << elapsedTime << endl;
+	cout << "Temps d'éxecution : " << elapsedTime << "s" << endl;
 
 	status = cudaMemcpy( res.data(), res_d, rows * cols, cudaMemcpyDeviceToHost );
 	if (status != cudaSuccess) cout << "Erreur memcpy DtH res_d" << endl;
 
-	cout << "traitement terminé" << endl;
 	cv::Mat m_out( rows, cols, CV_8UC1, res.data() );
-	cv::imwrite("out_id.jpg", m_out);
+	cv::imwrite(out, m_out);
 }
 
